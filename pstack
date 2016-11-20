@@ -1,0 +1,161 @@
+#!/bin/sh
+
+# pstack: print stack traces of running processes
+# Copyright (c) 2016 Duncan Roe
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; see the file COPYING.  If not, write to
+# the Free Software Foundation, 59 Temple Place - Suite 330,
+# Boston, MA 02111-1307, USA.
+
+# expect sees the next line as a comment continuation \
+exec expect -- "$0" "$@"
+
+# ------------------------------ trace_thread ------------------------------
+
+# This code was extracted from the mainline to simplify the implementation
+# of --reverse
+
+proc trace_thread n \
+{
+  global t_a
+
+  # get a stack trace of this thread
+  exp_send "thr $n\r"
+  expect \
+  {
+    -re {(Switching to thread[^\r]*)\r\n} {set ok 1}
+    {(gdb) } {set ok 0}
+  }
+  if {$ok} \
+  {
+    puts $t_a($n)
+    expect -re {(#0[^\r]*)\r\n}
+    puts $expect_out(1,string)     ;# Prefer this to line 1 of bt
+    expect {(gdb) }
+    set first 1
+    exp_send {bt};exp_send \r
+    expect "bt\r\n"
+    expect \
+    {
+      -re {([^\r]*)\r\n} \
+      {
+        if {$first} \
+          {set first 0} \
+          {puts $expect_out(1,string)}
+        exp_continue
+      }
+      {(gdb) }
+    }                              ;# expect
+  } \
+  else \
+  {
+    expect {(gdb) }                ;# LATER display error from gdb
+    puts "Fixme error changing to thread $n"
+  }
+}
+
+# +++++++++++++++++++++++ Main execution starts here +++++++++++++++++++++++
+
+# Deal with option arguments
+set vb 0
+set rv 0
+while {[string index [lindex $argv 0] 0] == "-"} \
+{
+  set arg [lindex $argv 0]
+  set argv [lreplace $argv 0 0]
+  if {$arg == "-v" || $arg == "--verbose"} \
+  then \
+    {incr vb} \
+  elseif {$arg == "-r" || $arg == "--reverse"} \
+    {set rv [expr {!$rv}]} \
+  else \
+  {
+    puts stderr "Unrecognised option: $arg"
+    exit 1
+  }
+}                                  ;# while {[lindex $argv 0] == -v}
+
+# Establish verbosity (for development and/or interest)
+if {$vb == 0} \
+  {log_user 0}
+if {$vb >= 2} \
+  {exp_internal 1}
+
+# start gdb, and put in some nice settings
+spawn gdb -n -q
+expect {(gdb) }
+exp_send "set print elements 0\r"
+expect {(gdb) }
+exp_send "set height 0\r"
+expect {(gdb) }
+exp_send "set width 0\r"
+expect {(gdb) }
+exp_send "set print pretty\r"
+expect {(gdb) }
+exp_send "set confirm off\r"
+expect {(gdb) }
+
+# process pids
+while {[llength $argv]} \
+{
+  set arg [lindex $argv 0]
+  set argv [lreplace $argv 0 0]
+  exp_send "attach $arg\r"
+  expect \
+  {
+    -re {No such process|Operation not permitted} {set ok 0}
+    {(gdb) } {set ok 1}
+  }
+  if {!$ok} \
+  {
+    puts stderr "$arg: $expect_out(0,string)."
+    expect {(gdb) }
+    continue
+  }
+
+  # get the list of threads
+  set nmax 0
+  exp_send {info threads};exp_send \r
+  expect \r\n
+  expect -re {Frame[ ]*\r\n}
+  expect \
+  {
+    -re {([*]?)([[:space:]]*)([[:digit:]]+)([^\r]*)\r\n} \
+    {
+      set n $expect_out(3,string)
+      if {$n > $nmax} {set nmax $n}
+      if {[string length $expect_out(1,string)]} {set t *} {set t " "}
+      set t_a($n) "$t $n  [string trim $expect_out(4,string)]"
+      exp_continue
+    }
+    {(gdb) } {}
+  }                                ;# expect
+
+  # dump stacks in the requested order
+  if {$rv} \
+  {
+    for {set n 1} {$n <= $nmax} {incr n} \
+      {trace_thread $n}
+  } \
+  {
+    for {set n $nmax} {$n >= 1} {incr n -1} \
+      {trace_thread $n}
+  }
+
+  # finished with this pid
+  exp_send {detach};exp_send \r
+  expect {(gdb) }
+}                                  ;# while {[llength $argv]}
+exp_send {q};exp_send \r
+expect eof

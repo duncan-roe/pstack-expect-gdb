@@ -1,0 +1,7 @@
+pstack - print stack traces of running processes
+
+This version of pstack is an expect script which runs gdb.
+As such, it should run on any platform which has expect and gdb installed.
+So far, it is known to work on 32- and 64-bit Linux and Cygwin systems.
+
+Homepage https://github.com/duncan-roe/pstack-expect-gdb

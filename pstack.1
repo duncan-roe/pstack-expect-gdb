@@ -1,0 +1,52 @@
+.\"
+.\" pstack manual page.
+.\" Copyright (c) 2016 Duncan Roe
+.\"
+.\" Original author: Duncan Roe <duncan_roe@optusnet.com.au>
+.\"
+.\" This program is free software; you can redistribute it and/or modify
+.\" it under the terms of the GNU General Public License as published by
+.\" the Free Software Foundation; either version 2, or (at your option)
+.\" any later version.
+.\"
+.\" This program is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public License
+.\" along with this program; see the file COPYING.  If not, write to
+.\" the Free Software Foundation, 59 Temple Place - Suite 330,
+.\" Boston, MA 02111-1307, USA.
+.\"
+.TH PSTACK 1 "Nov 19 2016" "Misc commands" "Linux Programmer's Manual"
+.SH NAME
+pstack \- print stack traces of running processes
+.SH SYNOPSIS
+\f3pstack\f1 [-\f3rv\f1] \f2pid\f1 [...]
+.SH DESCRIPTION
+\f3pstack\f1 uses \f3expect\f1 to run \f3gdb\f1 to attach to each process
+named by the \f2pid\f1s on the command line, and output a backtrace for every
+thread in that process.
+.TP
+\fB\-r\fR, \fB\-\-reverse\fR
+toggles frame output order (initially frame 1 last)
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+increases verbosity: shows interaction with \f3gdb\f1 if given once, and
+\f3expect\f1 diagnostics if given again
+.SH SUPPORTED PLATFORMS
+\f3pstack\f1 should run on any platform which has \f3expect\f1 and \f3gdb\f1
+installed. So far, it is known to work on 32- and 64-bit Linux and Cygwin
+systems.
+.SH SEE ALSO
+gdb(1), expect(1)
+.SH BUGS
+For some processes on Linux32 systems (e.g. Firefox), \f3gdb\f1's
+\f2backtrace\f1 command shows all program addresses as 0xffffffff. But,
+\f3gdb\f1's \f2thread\f1 command shows frame 0 with its actual address.
+\f3pstack\f1 therefore always shows frame 0 as reported by \f2thread\f1.
+This means the first line of each displayed stack dump has a \f2from\f1 in it
+instead of an \f2at\f1.
+.SH AUTHOR
+Written by Duncan Roe
