@@ -19,7 +19,19 @@
 # Boston, MA 02111-1307, USA.
 
 # expect sees the next line as a comment continuation \
+LC_ALL=C;# Expected responses are en \
+export LC_ALL; \
 exec expect -- "$0" "$@"
+
+# -------------------------- print_version_and_exit --------------------------
+
+proc print_version_and_exit {} \
+{
+  global version
+
+  puts "pstack (pstack-expect-gdb) $version\r\n"
+  exit 0
+}                                  ;# proc print_version_and_exit {}
 
 # ------------------------------ trace_thread ------------------------------
 
@@ -67,6 +79,8 @@ proc trace_thread n \
 
 # +++++++++++++++++++++++ Main execution starts here +++++++++++++++++++++++
 
+set version 0.2
+
 # Deal with option arguments
 set vb 0
 set rv 0
@@ -79,6 +93,8 @@ while {[string index [lindex $argv 0] 0] == "-"} \
     {incr vb} \
   elseif {$arg == "-r" || $arg == "--reverse"} \
     {set rv [expr {!$rv}]} \
+  elseif {$arg == "--version"} \
+    {print_version_and_exit} \
   else \
   {
     puts stderr "Unrecognised option: $arg"
@@ -91,6 +107,15 @@ if {$vb == 0} \
   {log_user 0}
 if {$vb >= 2} \
   {exp_internal 1}
+
+# Check that there are pids to stacktrace.
+# No pids with a single -v prints the version
+if {![llength $argv]} \
+{
+  if {$vb == 1 && !$rv} {print_version_and_exit}
+  puts stderr "pstack: No PIDs"
+  exit 1
+}                                  ;# if {![llength $argv]}
 
 # start gdb, and put in some nice settings
 spawn gdb -n -q
@@ -112,9 +137,11 @@ while {[llength $argv]} \
   set arg [lindex $argv 0]
   set argv [lreplace $argv 0 0]
   exp_send "attach $arg\r"
+
+  # Check for a list of known errors
   expect \
   {
-    -re {No such process|Operation not permitted} {set ok 0}
+    -re {Illegal process-id|No such process|Operation not permitted} {set ok 0}
     {(gdb) } {set ok 1}
   }
   if {!$ok} \
@@ -128,7 +155,24 @@ while {[llength $argv]} \
   set nmax 0
   exp_send {info threads};exp_send \r
   expect \r\n
-  expect -re {Frame[ ]*\r\n}
+
+  # If we have missed a previous error message, there will be no threads
+  set ok 0
+  expect \
+  {
+    -re {Frame[ ]*\r\n} {set ok 1}
+    {No threads}
+  }
+  if {!$ok} \
+  {
+    puts stderr "Gdb reported an error not known to this script."
+    puts stderr "Please run\r\n\r\n  pstack -v $arg\r\n"
+    puts stderr \
+      "and report the line after \"attach $arg\" to the project home page"
+    expect {(gdb) }
+    continue
+  }                                ;# if {!$ok}
+
   expect \
   {
     -re {([*]?)([[:space:]]*)([[:digit:]]+)([^\r]*)\r\n} \
