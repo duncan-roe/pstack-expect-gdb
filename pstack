@@ -48,6 +48,7 @@ proc trace_thread n \
   {
     -re {(Switching to thread[^\r]*)\r\n} {set ok 1}
     {(gdb) } {set ok 0}
+    timeout {puts stderr "Waiting for \"thread $n\" to complete"; exp_continue}
   }
   if {$ok} \
   {
@@ -143,6 +144,11 @@ while {[llength $argv]} \
   {
     -re {Illegal process-id|No such process|Operation not permitted} {set ok 0}
     {(gdb) } {set ok 1}
+    timeout \
+    {
+      puts stderr "Waiting for \"attach $arg\" to complete"
+      exp_continue
+    }
   }
   if {!$ok} \
   {
